@@ -1,0 +1,60 @@
+name: GitHub Actions Training (CI)
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    name: Preview Deployment of Azure Static Website
+    runs-on: ubuntu-latest
+    env:
+      ARM_CLIENT_ID: 0566f5b6-debf-45fd-8f3c-58fa8884daed
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+      ARM_SUBSCRIPTION_ID: ff3d879c-06ae-4b49-ad1f-1c8825837d91
+      ARM_TENANT_ID: 68f381e3-46da-47b9-ba57-6f322b8f0da1
+
+    steps:
+      - name: Ensure that NetID is set
+        run: |
+          if [ -z "${{ secrets.NETID }}" ]
+          then
+            echo "NETID is not set"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.5.4
+
+      - name: Terraform init
+        id: tfinit
+        working-directory: ./terraform
+        run: terraform init -backend-config="key=${{ secrets.NETID}}/terraform.tfstate"
+
+      - name: Post terraform init
+        uses: tamu-edu/it-ae-actions-terraform-pr-commenter@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commenter_type: init
+          commenter_input: ${{ format('{0}{1}', steps.tfinit.outputs.stdout, steps.tfinit.outputs.stderr) }}
+          commenter_exitcode: ${{ steps.tfinit.outputs.exitcode }}
+
+      - name: Terraform plan
+        id: tfplan
+        working-directory: ./terraform
+        run: terraform plan -var="netid=${{ secrets.NETID }}"
+
+      - name: Post terraform plan
+        uses: tamu-edu/it-ae-actions-terraform-pr-commenter@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          commenter_type: plan
+          commenter_input: ${{ format('{0}{1}', steps.tfplan.outputs.stdout, steps.tfplan.outputs.stderr) }}
+          commenter_exitcode: ${{ steps.tfplan.outputs.exitcode }}
